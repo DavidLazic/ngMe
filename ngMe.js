@@ -1,15 +1,9 @@
-(function (window) {
+;(function (window) {
     'use strict';
 
-    var MODULES = {};
-
-    function ngMe () {
-        this.params = {};
-    };
-
-    ngMe.prototype.someFn = function (msg) {
-        console.log(msg);
-        return this;
+    function ngMe (params) {
+        this.params = params || {};
+        this.modules = {};
     };
 
     ngMe.prototype.run = function (cb) {
@@ -18,43 +12,45 @@
         });
     };
 
-    ngMe.prototype.define = function (name, deps) {
-        if (this.isString(name) && this.isArray(deps)) {
-            var data = Array.prototype.slice(deps);
-            if (data.length) {
-                for (var i = data.length; i--;) {
-                    if (!MODULES[data[i]]) {
-                        console.error('Non-existent dependency \'' + data[i] + '\' in module \'' + name + '\'');
-                        return;
-                    }
-                }
-            }
+    ngMe.prototype.define = function (moduleName, deps) {
+        var __super = this;
+
+        if (this.isString(moduleName) && this.isArray(deps)) {
 
             function ModuleConstructor (deps) {
-                this.deps = deps;
+                this.requires = deps;
             }
 
-            ModuleConstructor.prototype.module = function (Scope) {
-                function Module (scope) {
-                    this.scope = scope;
+            ModuleConstructor.prototype.controller = function (vm, scope) {
+                var _this = this;
+
+                function Module (moduleName, vm, scope) {
+                    this.name = moduleName;
+                    this[vm] = scope;
+                    this.requires = _this.requires;
                 };
 
-                Module.prototype.$inject = function () {
+                Module.prototype.$$scope = function () {
+                    var _this = this;
+                    var _arguments = Array.prototype.slice.call(arguments);
+                    _arguments.forEach(function (arg) {
+                        _this[vm].call(_this[vm], __super.modules[arg]);
+                    });
 
-                };
+                    return _this;
+                }
 
-                Module.prototype.get = function () {
-                    this.someFn('calling from here');
-                    console.log('get fn');
-                };
+                __super.modules[moduleName] = scope;
 
-                return new Module(new Scope());
+                return (function () {
+                    return (new Module(moduleName, vm, scope)).$$scope(deps);
+                })();
             };
 
-            MODULES[name] = new ModuleConstructor(Array.prototype.slice(deps));
+            return new ModuleConstructor(Array.prototype.slice.call(deps));
         }
 
-        return MODULES[name] || {};
+        return {};
     };
 
     ngMe.prototype.isArray = function (param) {
@@ -68,14 +64,48 @@
     window.ngMe = new ngMe();
 })(window);
 
-ngMe.run(function () {
-    var newModule = ngMe.define('newModule', []);
+;(function () {
+    'use strict';
 
-    console.log(newModule);
-    var a = newModule.module(function () {
-        this.scopeFn = function () {
-            console.log('new module scope fn.');
-        };
+    ngMe.run(function () {
+        var aModule = ngMe.define('a', []);
+
+        aModule.controller('aModuleController', aModuleController);
+        function aModuleController () {
+            var vm = this;
+
+            vm.fnA = fnA;
+
+            function fnA () {
+                console.log('fnA called from bModule');
+            };
+        }
+
+        setTimeout(function () {
+            var bModule = ngMe.define('bModule', ['a'])
+                .controller('bModuleController', bModuleController);
+
+            function bModuleController (aModule) {
+                var vm = this;
+
+                vm.fnB = fnB;
+
+                init();
+
+                function init () {
+                    vm.fnB();
+                }
+
+                function fnB () {
+                    aModule.fnA();
+                };
+            }
+
+            console.log('b', bModule);
+
+        }, 1000);
+
+
+        console.log('a', aModule);
     });
-    console.log(a);
-});
+})();

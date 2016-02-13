@@ -1,4 +1,4 @@
-;(function (window) {
+;(function (window, document) {
     'use strict';
 
     /**
@@ -6,16 +6,19 @@
      * ngMe constructor fn.
      *
      * @param  {Object} params
+     * {
+     *     options: <Object>
+     * }
      * @public
      */
     function ngMe (params) {
-        this.params = params || {};
+        this.options = params && params.options || {};
         this.modules = {};
     };
 
     /**
      * @description
-     * Run fn on DOM ready.
+     * Run fn.
      *
      * @param  {Function} cb
      * @return {Function}
@@ -27,7 +30,7 @@
 
     /**
      * @description
-     * Instantiate module.
+     * Instantiate new module.
      *
      * @param  {String} moduleName
      * @param  {Array} deps
@@ -35,95 +38,14 @@
      * @public
      */
     ngMe.prototype.module = function (moduleName, deps) {
-        var __super = this;
-
-        function _resolveDependencies (arr, cb) {
-            var resolved = (function () {
-                    var requires = [];
-
-                    arr.forEach(function (item) {
-                        requires.push(__super.modules[item] || null);
-                    });
-
-                    return (requires.indexOf(null) !== -1) ? false : requires;
-                })();
-
-            if (resolved) {
-                return cb(resolved);
-            } else {
-                var timeout = setTimeout(function () {
-                    clearTimeout(timeout);
-                    _resolveDependencies(arr, cb);
-                }, 0);
-            }
-
-        }
 
         if (this.isString(moduleName) && this.isArray(deps)) {
 
-            /**
-             * @description
-             * Module dependency constructor fn.
-             *
-             * @param {Array} deps
-             * @public
-             */
-            function ModuleConstructor (deps) {
-                this.requires = deps;
-            }
-
-            /**
-             * @description
-             * Instantiate module's controller.
-             *
-             * @param  {String} vm
-             * @param  {Function} scope
-             * @return {Object}
-             * @public
-             */
-            ModuleConstructor.prototype.controller = function (vm, Scope) {
-                var _this = this;
-
-                /**
-                 * @description
-                 * Module constructor fn.
-                 *
-                 * @param {String} moduleName
-                 * @param {String} vm
-                 * @param {Function} scope
-                 * @public
-                 */
-                function Module (moduleName, vm, scope) {
-                    this.name = moduleName;
-                    this[vm] = scope;
-                    this.requires = _this.requires;
-                };
-
-                /**
-                 * @description
-                 * Invoke controller's scope.
-                 *
-                 * @return {Object}
-                 * @public
-                 */
-                Module.prototype.$$scope = function () {
-                    var _this = this;
-                    var _args = Array.prototype.slice.call(arguments)[0];
-
-                    document.addEventListener('DOMContentLoaded', function () {
-                        _resolveDependencies(_args, function (requires) {
-                            _this[vm].apply(_this[vm], requires);
-                            return _this;
-                        });
-                    });
-                }
-
-                __super.modules[moduleName] = Scope;
-
-                return (new Module(moduleName, vm, Scope)).$$scope(deps);
-            };
-
-            return new ModuleConstructor(Array.prototype.slice.call(deps));
+            return new ModuleService({
+                __super: this,
+                moduleName: moduleName,
+                deps: Array.prototype.slice.call(deps)
+            });
         }
 
         return {};
@@ -153,15 +75,131 @@
         return typeof param === 'string';
     };
 
+    /**
+     * @description
+     * ModuleService constructor fn.
+     *
+     * @param {Object} params
+     * {
+     *     __super: <Object>,
+     *     moduleName: <String>,
+     *     deps: <Array>
+     * }
+     * @public
+     */
+    function ModuleService (params) {
+        this.__super = params.__super || {};
+        this.moduleName = params.moduleName || '';
+        this.requires = params.deps || {};
+    };
+
+    /**
+     * @description
+     * Instantiate module's controller.
+     *
+     * @param  {String} vm
+     * @param  {Function} scope
+     * @return {Object}
+     * @public
+     */
+    ModuleService.prototype.controller = function (vm, Scope) {
+        this.__super.modules[this.moduleName] = Scope;
+
+        return (new Module({
+            __super: this.__super,
+            moduleName: this.moduleName,
+            vm: vm,
+            scope: Scope,
+            requires: this.requires
+        })).$$scope(vm);
+    };
+
+    /**
+     * @description
+     * Module constructor fn.
+     *
+     * @param {Object} params
+     * {
+     *     __super: <Object>,
+     *     moduleName: <String>,
+     *     vm: <String>,
+     *     scope: <Object>,
+     *     requires: <Array>
+     * }
+     * @public
+     */
+    function Module (params) {
+        this.__super = params.__super || {};
+        this.name = params.moduleName || '';
+        this[params.vm] = params.scope || {};
+        this.requires = params.requires || [];
+    };
+
+    /**
+     * @description
+     * Invoke controller's scope.
+     *
+     * @param  {String} vm
+     * @return {Object}
+     * @public
+     */
+    Module.prototype.$$scope = function (vm) {
+        var _this = this;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            _resolveDependencies.apply(_this, [_this.requires, function (requires) {
+                this[vm].apply(this[vm], requires);
+                return this;
+            }]);
+        });
+
+    }
+
+    /**
+     * @description
+     * Resolve module's dependencies by instantiating modules in specific order.
+     *
+     * @param  {Array} arr
+     * @param  {Function} cb
+     * @return {Function}
+     * @private
+     */
+    function _resolveDependencies (arr, cb) {
+        _getResolved.call(this, arr, function (resolved) {
+            if (resolved) return cb.call(this, resolved);
+        });
+    }
+
+    /**
+     * @description
+     * Get resolved dependencies.
+     *
+     * @param  {Array} arr
+     * @param  {Function} cb
+     * @return {Function}
+     * @private
+     */
+    function _getResolved (arr, cb) {
+        var _this = this.__super;
+        var requires = [];
+
+        arr.forEach(function (item) {
+            requires.push(_this.modules[item] || null);
+        });
+
+        return cb.call(this, (requires.indexOf(null) !== -1) ? false : requires);
+    }
+
     window.ngMe = new ngMe();
-})(window);
+})(window, document);
 
 ;(function () {
     'use strict';
 
     ngMe.run(function () {
 
-        var bModule = ngMe.module('bModule', ['cModule', 'aModule'])
+        // B MODULE
+        ngMe.module('bModule', ['cModule', 'aModule'])
             .controller('BController', BController);
 
         function BController (cModule, aModule) {
@@ -192,6 +230,7 @@
             }
         }
 
+        // A MODULE
         ngMe.module('aModule', ['bModule'])
             .controller('AController', AController);
 
@@ -211,9 +250,8 @@
             };
         }
 
-
-
-        var cModule = ngMe.module('cModule', [])
+        // C MODULE
+        ngMe.module('cModule', [])
             .controller('CController', CController);
 
         function CController () {
@@ -225,8 +263,5 @@
                 console.log('fn C');
             }
         }
-
-
-
     });
 })();

@@ -22,9 +22,7 @@
      * @public
      */
     ngMe.prototype.run = function (cb) {
-        document.addEventListener('DOMContentLoaded', function () {
-            if (typeof cb === 'function') return cb();
-        });
+        if (typeof cb === 'function') return cb();
     };
 
     /**
@@ -38,6 +36,28 @@
      */
     ngMe.prototype.module = function (moduleName, deps) {
         var __super = this;
+
+        function _resolveDependencies (arr, cb) {
+            var resolved = (function () {
+                    var requires = [];
+
+                    arr.forEach(function (item) {
+                        requires.push(__super.modules[item] || null);
+                    });
+
+                    return (requires.indexOf(null) !== -1) ? false : requires;
+                })();
+
+            if (resolved) {
+                return cb(resolved);
+            } else {
+                var timeout = setTimeout(function () {
+                    clearTimeout(timeout);
+                    _resolveDependencies(arr, cb);
+                }, 0);
+            }
+
+        }
 
         if (this.isString(moduleName) && this.isArray(deps)) {
 
@@ -88,15 +108,14 @@
                  */
                 Module.prototype.$$scope = function () {
                     var _this = this;
-                    var _arguments = Array.prototype.slice.call(arguments);
-                    var requires = [];
+                    var _args = Array.prototype.slice.call(arguments)[0];
 
-                    _arguments[0].forEach(function (arg) {
-                        requires.push(__super.modules[arg]);
+                    document.addEventListener('DOMContentLoaded', function () {
+                        _resolveDependencies(_args, function (requires) {
+                            _this[vm].apply(_this[vm], requires);
+                            return _this;
+                        });
                     });
-
-                    _this[vm].apply(_this[vm], requires);
-                    return _this;
                 }
 
                 __super.modules[moduleName] = Scope;
@@ -142,37 +161,6 @@
 
     ngMe.run(function () {
 
-        var aModule = ngMe.module('aModule', []);
-
-        aModule.controller('AController', AController);
-        function AController () {
-            var vm = this;
-
-            vm.fnA = fnA;
-
-            function fnA () {
-                console.log('fnA called from bModule');
-            };
-        }
-
-
-
-        var cModule = ngMe.module('cModule', [])
-            .controller('CController', CController);
-
-        function CController () {
-            var vm = this;
-
-            console.log('CCC');
-            vm.fnC = fnC;
-
-            function fnC () {
-                console.log('fn C');
-            }
-        }
-
-
-
         var bModule = ngMe.module('bModule', ['cModule', 'aModule'])
             .controller('BController', BController);
 
@@ -180,6 +168,7 @@
             var vm = this;
 
             vm.fnB = fnB;
+            vm.callFromA = callFromA;
 
             init();
 
@@ -197,6 +186,47 @@
                 });
 
             };
+
+            function callFromA () {
+                console.log('called from moduleA');
+            }
         }
+
+        ngMe.module('aModule', ['bModule'])
+            .controller('AController', AController);
+
+        function AController (bModule) {
+            var vm = this;
+
+            vm.fnA = fnA;
+
+            init();
+
+            function init () {
+                fnA();
+            }
+
+            function fnA () {
+                bModule.callFromA();
+            };
+        }
+
+
+
+        var cModule = ngMe.module('cModule', [])
+            .controller('CController', CController);
+
+        function CController () {
+            var vm = this;
+
+            vm.fnC = fnC;
+
+            function fnC () {
+                console.log('fn C');
+            }
+        }
+
+
+
     });
 })();

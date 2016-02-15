@@ -1,19 +1,20 @@
 ;(function (window, document) {
     'use strict';
 
+    var __super;
+
     /**
      * @description
      * ngMe constructor fn.
      *
      * @param  {Object} params
      * {
-     *     options: <Object>
+     *     injector: <Object>
      * }
      * @public
      */
     function ngMe (params) {
-        this.options = params && params.options || {};
-        this.modules = {};
+        this.$injector = params.injector || {};
     };
 
     /**
@@ -41,11 +42,10 @@
 
         if (this.isString(moduleName) && this.isArray(deps)) {
 
-            return new ModuleService({
-                __super: this,
+            return new Module({
                 moduleName: moduleName,
-                deps: Array.prototype.slice.call(deps)
-            });
+                deps: deps
+            }).$$register();
         }
 
         return {};
@@ -77,120 +77,145 @@
 
     /**
      * @description
-     * ModuleService constructor fn.
+     * Module constructor fn.
      *
      * @param {Object} params
      * {
-     *     __super: <Object>,
-     *     moduleName: <String>,
-     *     deps: <Array>
+     *     name: <String>,
+     *     requires: <Array>
      * }
      * @public
      */
-    function ModuleService (params) {
-        this.__super = params.__super || {};
-        this.moduleName = params.moduleName || '';
-        this.requires = params.deps || {};
+    function Module (params) {
+        this.name = params.moduleName || '';
+        this.requires = params.deps || [];
+    };
+
+    /**
+     * @description
+     * Register module.
+     *
+     * @return {Function}
+     * @public
+     */
+    Module.prototype.$$register = function () {
+        return __super.$injector.add(this);
     };
 
     /**
      * @description
      * Instantiate module's controller.
      *
-     * @param  {String} vm
-     * @param  {Function} scope
-     * @return {Object}
+     * @param  {Function} Scope
+     * @return {Function}
      * @public
      */
-    ModuleService.prototype.controller = function (vm, Scope) {
-        this.__super.modules[this.moduleName] = Scope;
-
-        return (new Module({
-            __super: this.__super,
-            moduleName: this.moduleName,
-            vm: vm,
-            scope: Scope,
-            requires: this.requires
-        })).$$scope(vm);
-    };
-
-    /**
-     * @description
-     * Module constructor fn.
-     *
-     * @param {Object} params
-     * {
-     *     __super: <Object>,
-     *     moduleName: <String>,
-     *     vm: <String>,
-     *     scope: <Object>,
-     *     requires: <Array>
-     * }
-     * @public
-     */
-    function Module (params) {
-        this.__super = params.__super || {};
-        this.name = params.moduleName || '';
-        this[params.vm] = params.scope || {};
-        this.requires = params.requires || [];
+    Module.prototype.controller = function (Scope) {
+        this.ctrl = Scope;
+        return this.$$scope();
     };
 
     /**
      * @description
      * Invoke controller's scope.
      *
-     * @param  {String} vm
+     * @return {Function}
+     * @public
+     */
+    Module.prototype.$$scope = function () {
+        var _this = this;
+        var timeout = setTimeout(function () {
+            clearTimeout(timeout);
+            return __super.$injector.invoke(_this);
+        }, 0);
+    }
+
+    /**
+     * @description
+     * Injector constructor fn.
+     *
+     * @public
+     */
+    function Injector () {
+        this.dependencies = {};
+    };
+
+    /**
+     * @description
+     * Register module.
+     *
+     * @param  {Object} module
      * @return {Object}
      * @public
      */
-    Module.prototype.$$scope = function (vm) {
+    Injector.prototype.add = function (module) {
+        this.dependencies[module.name] = module;
+        return module;
+    };
+
+    /**
+     * @description
+     * Invoke dependency injection.
+     *
+     * @param  {Object} module
+     * @return {Function}
+     * @public
+     */
+    Injector.prototype.invoke = function (module) {
+        return this.resolve(module.ctrl, function (deps) {
+            try {
+                return module.ctrl.apply(module.ctrl || {}, deps);
+            } catch (e) {
+                var timeout = setTimeout(function () {
+                    clearTimeout(timeout);
+                    return module.ctrl.apply(module.ctrl || {}, deps);
+                }, 0);
+            }
+        });
+    };
+
+    /**
+     * @description
+     * Resolve module's dependencies.
+     *
+     * @param  {Function} scope
+     * @param  {Function} cb
+     * @return {Function}
+     * @public
+     */
+    Injector.prototype.resolve = function (scope, cb) {
         var _this = this;
 
-        document.addEventListener('DOMContentLoaded', function () {
-            _resolveDependencies.apply(_this, [_this.requires, function (requires) {
-                this[vm].apply(this[vm], requires);
-                return this;
-            }]);
-        });
+        return this.getArguments(scope, function (_args) {
+            var deps = [];
 
-    }
+            _args.forEach(function (arg) {
+                if (arg) deps.push(_this.dependencies[arg].ctrl);
+            });
+
+            return cb(deps);
+        });
+    };
 
     /**
      * @description
-     * Resolve module's dependencies by instantiating modules in specific order.
+     * Get constructor's arguments as dependencies.
      *
-     * @param  {Array} arr
+     * @param  {Function} scope
      * @param  {Function} cb
      * @return {Function}
-     * @private
+     * @public
      */
-    function _resolveDependencies (arr, cb) {
-        _getResolved.call(this, arr, function (resolved) {
-            if (resolved) return cb.call(this, resolved);
-        });
-    }
+    Injector.prototype.getArguments = function (scope, cb) {
+        var regex = /^function\s*[^\(]*\(\s*([^\)]*)\)/m;
+        return cb(scope.toString().match(regex)[1].replace(/ /g, '').split(','));
+    };
 
-    /**
-     * @description
-     * Get resolved dependencies.
-     *
-     * @param  {Array} arr
-     * @param  {Function} cb
-     * @return {Function}
-     * @private
-     */
-    function _getResolved (arr, cb) {
-        var _this = this.__super;
-        var requires = [];
+    window.ngMe = new ngMe({
+        injector: new Injector()
+    });
 
-        arr.forEach(function (item) {
-            requires.push(_this.modules[item] || null);
-        });
-
-        return cb.call(this, (requires.indexOf(null) !== -1) ? false : requires);
-    }
-
-    window.ngMe = new ngMe();
+    __super = window.ngMe;
 })(window, document);
 
 ;(function () {
@@ -198,9 +223,9 @@
 
     ngMe.run(function () {
 
-        // B MODULE
-        ngMe.module('bModule', ['cModule', 'aModule'])
-            .controller('BController', BController);
+
+        var bModule = ngMe.module('bModule', ['cModule', 'aModule'])
+            .controller(BController);
 
         function BController (cModule, aModule) {
             var vm = this;
@@ -211,13 +236,11 @@
             init();
 
             function init () {
-                setTimeout(function () {
-                    vm.fnB();
-                }, 2000);
-
+                vm.fnB();
             }
 
             function fnB () {
+                console.log('calling B->A');
                 aModule.fnA();
                 document.addEventListener('click', function () {
                     cModule.fnC();
@@ -230,9 +253,9 @@
             }
         }
 
-        // A MODULE
-        ngMe.module('aModule', ['bModule'])
-            .controller('AController', AController);
+
+        var aModule = ngMe.module('aModule', ['bModule'])
+            .controller(AController);
 
         function AController (bModule) {
             var vm = this;
@@ -246,13 +269,15 @@
             }
 
             function fnA () {
+                console.log('A-->B');
                 bModule.callFromA();
             };
         }
 
-        // C MODULE
-        ngMe.module('cModule', [])
-            .controller('CController', CController);
+
+
+        var cModule = ngMe.module('cModule', [])
+            .controller(CController);
 
         function CController () {
             var vm = this;
@@ -263,5 +288,6 @@
                 console.log('fn C');
             }
         }
+
     });
 })();

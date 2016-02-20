@@ -53,6 +53,24 @@
 
     /**
      * @description
+     * Annotate module.
+     *
+     * @param  {String} vm
+     * @param  {Function|Object} constr
+     * @return {Function}
+     * @public
+     */
+    ngMe.prototype.$annotate = function (vm, constr) {
+        return function (ctx) {
+            ctx.vm = vm;
+            ctx[vm] = constr;
+            ctx.$$scope()(ctx);
+            return ctx;
+        };
+    };
+
+    /**
+     * @description
      * Check if param is array.
      *
      * @param  {*} param
@@ -106,28 +124,42 @@
      * @description
      * Instantiate module's controller.
      *
+     * @param  {String} vm
      * @param  {Function} Scope
      * @return {Function}
      * @public
      */
-    Module.prototype.controller = function (Scope) {
-        this.ctrl = Scope;
-        return this.$$scope();
+    Module.prototype.controller = function (vm, Scope) {
+        return __super.$annotate(vm, Scope)(this);
     };
 
     /**
      * @description
-     * Invoke controller's scope.
+     * Instantiate module's service.
+     *
+     * @param  {String} vm
+     * @param  {Function} Service
+     * @return {Function}
+     * @public
+     */
+    Module.prototype.service = function (vm, Service) {
+        return __super.$annotate(vm, new Service())(this);
+    };
+
+    /**
+     * @description
+     * Invoke scope.
      *
      * @return {Function}
      * @public
      */
     Module.prototype.$$scope = function () {
-        var _this = this;
-        var timeout = setTimeout(function () {
-            clearTimeout(timeout);
-            return __super.$injector.invoke(_this);
-        }, 0);
+        return function (ctx) {
+            var timeout = setTimeout(function () {
+                clearTimeout(timeout);
+                return __super.$injector.invoke(ctx);
+            }, 0);
+        };
     }
 
     /**
@@ -162,13 +194,13 @@
      * @public
      */
     Injector.prototype.invoke = function (module) {
-        return this.resolve(module.ctrl, function (deps) {
+        return this.resolve(module)(this, function (deps) {
             try {
-                return module.ctrl.apply(module.ctrl || {}, deps);
+                (typeof module[module.vm] === 'function') && module[module.vm].apply(module[module.vm] || {}, deps);
             } catch (e) {
                 var timeout = setTimeout(function () {
                     clearTimeout(timeout);
-                    return module.ctrl.apply(module.ctrl || {}, deps);
+                    (typeof module[module.vm] === 'function') && module[module.vm].apply(module[module.vm] || {}, deps);
                 }, 0);
             }
         });
@@ -178,37 +210,21 @@
      * @description
      * Resolve module's dependencies.
      *
-     * @param  {Function} scope
-     * @param  {Function} cb
+     * @param  {Object} module
      * @return {Function}
      * @public
      */
-    Injector.prototype.resolve = function (scope, cb) {
-        var _this = this;
+    Injector.prototype.resolve = function (module) {
+        var deps = [];
 
-        return this.getArguments(scope, function (_args) {
-            var deps = [];
-
-            _args.forEach(function (arg) {
-                if (arg) deps.push(_this.dependencies[arg].ctrl);
+        return function (ctx, cb) {
+            module.requires.forEach(function (arg) {
+                var vm = ctx.dependencies[arg].vm;
+                arg && deps.push(ctx.dependencies[arg][vm]);
             });
 
             return cb(deps);
-        });
-    };
-
-    /**
-     * @description
-     * Get constructor's arguments as dependencies.
-     *
-     * @param  {Function} scope
-     * @param  {Function} cb
-     * @return {Function}
-     * @public
-     */
-    Injector.prototype.getArguments = function (scope, cb) {
-        var regex = /^function\s*[^\(]*\(\s*([^\)]*)\)/m;
-        return cb(scope.toString().match(regex)[1].replace(/ /g, '').split(','));
+        };
     };
 
     window.ngMe = new ngMe({
@@ -223,71 +239,28 @@
 
     ngMe.run(function () {
 
+        ngMe.module('aModule.controller', [
+            'aModule.service'
+        ]).controller('AController', AController);
 
-        var bModule = ngMe.module('bModule', ['cModule', 'aModule'])
-            .controller(BController);
-
-        function BController (cModule, aModule) {
-            var vm = this;
-
-            vm.fnB = fnB;
-            vm.callFromA = callFromA;
-
-            init();
-
-            function init () {
-                vm.fnB();
-            }
-
-            function fnB () {
-                console.log('calling B->A');
-                aModule.fnA();
-                document.addEventListener('click', function () {
-                    cModule.fnC();
-                });
-
-            };
-
-            function callFromA () {
-                console.log('called from moduleA');
-            }
+        function AController (AService) {
+            console.log(AService);
+            AService.serviceFn();
         }
 
+        ngMe.module('aModule.service', ['aModule.controller'])
+            .service('AService', AService);
 
-        var aModule = ngMe.module('aModule', ['bModule'])
-            .controller(AController);
+        function AService (AController) {
 
-        function AController (bModule) {
-            var vm = this;
-
-            vm.fnA = fnA;
-
-            init();
-
-            function init () {
-                fnA();
+            function serviceFn () {
+                console.log('service fn');
+                console.log(AController);
             }
 
-            function fnA () {
-                console.log('A-->B');
-                bModule.callFromA();
+            return {
+                serviceFn: serviceFn
             };
         }
-
-
-
-        var cModule = ngMe.module('cModule', [])
-            .controller(CController);
-
-        function CController () {
-            var vm = this;
-
-            vm.fnC = fnC;
-
-            function fnC () {
-                console.log('fn C');
-            }
-        }
-
     });
 })();

@@ -19,14 +19,24 @@
 
     /**
      * @description
-     * Run fn.
+     * Instantiate new app.
      *
-     * @param  {Function} cb
-     * @return {Function}
+     * @param  {String} name
+     * @param  {Array} deps
+     * @return {Object}
      * @public
      */
-    ngMe.prototype.run = function (cb) {
-        if (typeof cb === 'function') return cb();
+    ngMe.prototype.app = function (name, deps) {
+
+        if (this.isString(name) && this.isArray(deps)) {
+
+            return new App({
+                name: name,
+                deps: deps
+            });
+        }
+
+        return {};
     };
 
     /**
@@ -64,7 +74,6 @@
         return function (ctx) {
             ctx.vm = vm;
             ctx[vm] = constr;
-            ctx.$$scope()(ctx);
             return ctx;
         };
     };
@@ -95,6 +104,48 @@
 
     /**
      * @description
+     * App constructor fn.
+     *
+     * @param {Object} params
+     * {
+     *     name: <String>,
+     *     requires: <Array>
+     * }
+     * @public
+     */
+    function App (params) {
+        this.name = params.name || '';
+        this.requires = params.deps || [];
+    };
+
+    /**
+     * @description
+     * Instantiate app's controller.
+     *
+     * @param  {String} vm
+     * @param  {Function} Scope
+     * @return {Function}
+     * @public
+     */
+    App.prototype.controller = function (vm, Scope) {
+        return __super.$annotate(vm, Scope)(this).$$scope()(this);
+    };
+
+    /**
+     * @description
+     * Invoke controller scope.
+     *
+     * @return {Function}
+     * @public
+     */
+    App.prototype.$$scope = function () {
+        return function (ctx) {
+            return __super.$injector.invoke(ctx);
+        };
+    }
+
+    /**
+     * @description
      * Module constructor fn.
      *
      * @param {Object} params
@@ -122,19 +173,6 @@
 
     /**
      * @description
-     * Instantiate module's controller.
-     *
-     * @param  {String} vm
-     * @param  {Function} Scope
-     * @return {Function}
-     * @public
-     */
-    Module.prototype.controller = function (vm, Scope) {
-        return __super.$annotate(vm, Scope)(this);
-    };
-
-    /**
-     * @description
      * Instantiate module's service.
      *
      * @param  {String} vm
@@ -148,27 +186,12 @@
 
     /**
      * @description
-     * Invoke scope.
-     *
-     * @return {Function}
-     * @public
-     */
-    Module.prototype.$$scope = function () {
-        return function (ctx) {
-            var timeout = setTimeout(function () {
-                clearTimeout(timeout);
-                return __super.$injector.invoke(ctx);
-            }, 0);
-        };
-    }
-
-    /**
-     * @description
      * Injector constructor fn.
      *
      * @public
      */
     function Injector () {
+        this.queue = [];
         this.dependencies = {};
     };
 
@@ -182,6 +205,7 @@
      */
     Injector.prototype.add = function (module) {
         this.dependencies[module.name] = module;
+        this.queue.push(module);
         return module;
     };
 
@@ -194,15 +218,30 @@
      * @public
      */
     Injector.prototype.invoke = function (module) {
-        return this.resolve(module)(this, function (deps) {
-            try {
-                (typeof module[module.vm] === 'function') && module[module.vm].apply(module[module.vm] || {}, deps);
-            } catch (e) {
-                var timeout = setTimeout(function () {
-                    clearTimeout(timeout);
-                    (typeof module[module.vm] === 'function') && module[module.vm].apply(module[module.vm] || {}, deps);
-                }, 0);
-            }
+        var _this = this;
+        document.addEventListener('DOMContentLoaded', function () {
+            _this.$$append();
+            return _this.resolve(module)(_this, function (deps) {
+                return module[module.vm].apply(module[module.vm], deps);
+            });
+        });
+    };
+
+    /**
+     * @description
+     * Append service dependencies.
+     *
+     * @return {Object}
+     * @public
+     */
+    Injector.prototype.$$append = function () {
+        var _this = this;
+        this.queue.forEach(function (item) {
+            var parentVM = item.vm;
+            item.requires.forEach(function (dep) {
+                var vm = _this.dependencies[dep].vm;
+                item[parentVM][vm] = _this.dependencies[dep][vm];
+            });
         });
     };
 
@@ -237,30 +276,55 @@
 ;(function () {
     'use strict';
 
-    ngMe.run(function () {
+    ngMe.app('app', ['moduleA', 'moduleB']).controller('AppController', AppController);
 
-        ngMe.module('aModule.controller', [
-            'aModule.service'
-        ]).controller('AController', AController);
+    function AppController (moduleA, moduleB) {
+        var vm = this;
 
-        function AController (AService) {
-            console.log(AService);
-            AService.serviceFn();
+        vm.initFn = initFn;
+
+        init();
+
+        function init () {
+            vm.initFn();
         }
 
-        ngMe.module('aModule.service', ['aModule.controller'])
-            .service('AService', AService);
-
-        function AService (AController) {
-
-            function serviceFn () {
-                console.log('service fn');
-                console.log(AController);
-            }
-
-            return {
-                serviceFn: serviceFn
-            };
+        function initFn () {
+            console.log('initFn');
+            moduleA.serviceAFn();
+            moduleB.serviceBFn();
         }
-    });
+    }
+
+    ngMe.module('moduleA', ['moduleB']).service('AService', AService);
+
+    function AService () {
+
+        function serviceAFn () {
+            console.log('service fn');
+            new BService().fromA();
+        }
+
+        return {
+            serviceAFn: serviceAFn
+        };
+    }
+
+    ngMe.module('moduleB', ['moduleA']).service('BService', BService);
+
+    function BService () {
+
+        function serviceBFn () {
+            new AService().serviceAFn();
+        }
+
+        function fromA () {
+            console.log('from A');
+        }
+
+        return {
+            serviceBFn: serviceBFn,
+            fromA: fromA
+        };
+    }
 })();

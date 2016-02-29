@@ -1,0 +1,26 @@
+{
+  "name": "ngMe",
+  "main": "ngMe.min.js",
+  "homepage": "https://github.com/DavidLazic/ngMe",
+  "authors": [
+    "David Lazic <incognetii@gmail.com>"
+  ],
+  "description": "Angular-like DI",
+  "moduleType": [],
+  "keywords": [
+    "Angular",
+    "dependency",
+    "injection",
+    "DI",
+    "JS",
+    "JavaScript"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

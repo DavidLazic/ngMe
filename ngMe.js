@@ -1,3 +1,9 @@
+/**
+ *
+ * Author: David Lazic
+ * Repo: https://github.com/DavidLazic/ngMe
+ */
+
 ;(function (window, document) {
     'use strict';
 

@@ -6,7 +6,9 @@ Experimentation with Angular-like dependency injection.
 
 ### Install
 
-> bower install --save-dev ngMe
+````shell
+$bower install --save-dev ngMe
+````
 
 ### How does it work?
 

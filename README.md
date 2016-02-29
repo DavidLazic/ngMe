@@ -4,6 +4,10 @@
 
 Experimentation with Angular-like dependency injection.
 
+### Install
+
+> bower install --save-dev ngMe
+
 ### How does it work?
 
 Since ngMe is not an actual SPA (single page application) framework, it doesn't have most of the Angular benefits. I have tried keeping it close to Angular as much as I could, but there were many limitations, like, because there's no router, we cannot specify one controller per view / page. I could update ngMe to have an actual router, but that would lead me to writing other framework parts, which I don't really want to do, as this was intented to be an experiment only.

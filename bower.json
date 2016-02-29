@@ -1,5 +1,6 @@
 {
   "name": "ngMe",
+  "version": "1.0.0",
   "main": "ngMe.min.js",
   "homepage": "https://github.com/DavidLazic/ngMe",
   "authors": [

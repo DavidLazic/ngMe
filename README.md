@@ -4,7 +4,7 @@
 
 Experimentation with Angular-like dependency injection.
 
-### Install
+### Install via bower
 
 ````shell
 $bower install --save-dev ngMe

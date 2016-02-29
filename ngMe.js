@@ -66,7 +66,7 @@
      * Annotate module.
      *
      * @param  {String} vm
-     * @param  {Function|Object} constr
+     * @param  {Function} constr
      * @return {Function}
      * @public
      */
@@ -173,15 +173,28 @@
 
     /**
      * @description
-     * Instantiate module's service.
+     * Instantiate factory.
+     *
+     * @return {Object}
+     * @public
+     */
+    Module.prototype.$$init = function () {
+        var service = this[this.vm].call(this[this.vm]);
+        __super.$injector.cached[this.name] = service;
+        return this;
+    };
+
+    /**
+     * @description
+     * Instantiate module's factory.
      *
      * @param  {String} vm
-     * @param  {Function} Service
+     * @param  {Function} Factory
      * @return {Function}
      * @public
      */
-    Module.prototype.service = function (vm, Service) {
-        return __super.$annotate(vm, new Service())(this);
+    Module.prototype.factory = function (vm, Factory) {
+        return __super.$annotate(vm, Factory)(this).$$init();
     };
 
     /**
@@ -193,6 +206,7 @@
     function Injector () {
         this.queue = [];
         this.dependencies = {};
+        this.cached = {};
     };
 
     /**
@@ -220,7 +234,7 @@
     Injector.prototype.invoke = function (module) {
         var _this = this;
         document.addEventListener('DOMContentLoaded', function () {
-            _this.$$append();
+            _this.$$resolveServices();
             return _this.resolve(module)(_this, function (deps) {
                 return module[module.vm].apply(module[module.vm], deps);
             });
@@ -229,19 +243,22 @@
 
     /**
      * @description
-     * Append service dependencies.
+     * Resolve services.
      *
      * @return {Object}
      * @public
      */
-    Injector.prototype.$$append = function () {
+    Injector.prototype.$$resolveServices = function () {
         var _this = this;
+
         this.queue.forEach(function (item) {
-            var parentVM = item.vm;
+            var deps = [];
+
             item.requires.forEach(function (dep) {
-                var vm = _this.dependencies[dep].vm;
-                item[parentVM][vm] = _this.dependencies[dep][vm];
+                _this.cached[dep] && deps.push(_this.cached[dep]);
             });
+
+            _this.cached[item.name] = item[item.vm].apply(item[item.vm], deps);
         });
     };
 
@@ -258,8 +275,7 @@
 
         return function (ctx, cb) {
             module.requires.forEach(function (arg) {
-                var vm = ctx.dependencies[arg].vm;
-                arg && deps.push(ctx.dependencies[arg][vm]);
+                arg && deps.push(ctx.cached[arg]);
             });
 
             return cb(deps);
@@ -272,59 +288,3 @@
 
     __super = window.ngMe;
 })(window, document);
-
-;(function () {
-    'use strict';
-
-    ngMe.app('app', ['moduleA', 'moduleB']).controller('AppController', AppController);
-
-    function AppController (moduleA, moduleB) {
-        var vm = this;
-
-        vm.initFn = initFn;
-
-        init();
-
-        function init () {
-            vm.initFn();
-        }
-
-        function initFn () {
-            console.log('initFn');
-            moduleA.serviceAFn();
-            moduleB.serviceBFn();
-        }
-    }
-
-    ngMe.module('moduleA', ['moduleB']).service('AService', AService);
-
-    function AService () {
-
-        function serviceAFn () {
-            console.log('service fn');
-            new BService().fromA();
-        }
-
-        return {
-            serviceAFn: serviceAFn
-        };
-    }
-
-    ngMe.module('moduleB', ['moduleA']).service('BService', BService);
-
-    function BService () {
-
-        function serviceBFn () {
-            new AService().serviceAFn();
-        }
-
-        function fromA () {
-            console.log('from A');
-        }
-
-        return {
-            serviceBFn: serviceBFn,
-            fromA: fromA
-        };
-    }
-})();
